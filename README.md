@@ -8,8 +8,25 @@ A modular daily health monitoring system that fetches data from your Oura Ring, 
 - 🤖 **AI-Powered Analysis**: Uses Azure OpenAI to generate personalized insights and recommendations
 - 📱 **Telegram Notifications**: Delivers daily summaries directly to your Telegram
 - ⏰ **Automated Scheduling**: Runs daily at your configured time
+- 👥 **Multi-User Support**: Monitor health for multiple users with a single deployment
 - 🔧 **Modular Architecture**: Easy to extend with new data sources, analyzers, or notification channels
 - 🐳 **Container Ready**: Designed to run on Proxmox LXC or any Linux environment
+
+## Multi-User Support
+
+Health Assistant supports monitoring multiple users with a single deployment. Each user:
+- Has their own Oura Ring token and Telegram bot/chat
+- Receives personalized health summaries independently
+- Can be enabled/disabled without affecting others
+- Shares the same Azure OpenAI deployment (cost-effective)
+- Runs on the same daily schedule
+
+**Example use cases:**
+- Family health monitoring (parents and children)
+- Couples tracking fitness together
+- Small teams/groups with shared health goals
+
+See the [Multi-User Configuration](#multi-user-configuration) section for setup instructions.
 
 ## Architecture
 
@@ -130,6 +147,100 @@ Common timezones:
 - `Europe/Paris`
 - `Asia/Shanghai`
 - `Asia/Tokyo`
+
+## Multi-User Configuration
+
+Health Assistant supports monitoring multiple users. You can configure multiple people to each receive their own personalized health summaries.
+
+### Setting Up Multiple Users
+
+1. **Create the multi-user config structure**:
+
+```bash
+# Option 1: Start with multi-user example
+cp config.yaml.example.multi config.yaml
+
+# Option 2: Migrate existing single-user config
+python scripts/migrate_config.py config.yaml
+```
+
+2. **Edit `config.yaml`** with your users' credentials:
+
+```yaml
+# Shared resources (used by all users)
+azure:
+  endpoint: "https://YOUR_RESOURCE.openai.azure.com/"
+  api_key: "YOUR_AZURE_API_KEY"
+  deployment_name: "gpt-4"
+
+scheduler:
+  hour: 12
+  minute: 0
+  timezone: "UTC"
+
+# Individual users
+users:
+  - id: "user_alice"
+    name: "Alice"
+    enabled: true
+    oura:
+      access_token: "ALICE_OURA_TOKEN"
+    telegram:
+      bot_token: "ALICE_BOT_TOKEN"
+      chat_id: "ALICE_CHAT_ID"
+
+  - id: "user_bob"
+    name: "Bob"
+    enabled: true
+    oura:
+      access_token: "BOB_OURA_TOKEN"
+    telegram:
+      bot_token: "BOB_BOT_TOKEN"
+      chat_id: "BOB_CHAT_ID"
+```
+
+### Adding a New User
+
+To add another user to an existing configuration:
+
+1. Add a new entry to the `users:` array
+2. Assign a unique `id` (e.g., "user_charlie")
+3. Get their Oura token from https://cloud.ouraring.com/personal-access-tokens
+4. Create a Telegram bot for them (or use a shared bot with different chat_id)
+5. Set `enabled: true`
+6. Restart Health Assistant
+
+### Disabling a User Temporarily
+
+To temporarily disable a user without removing their configuration:
+
+```yaml
+- id: "user_alice"
+  enabled: false  # Alice won't receive health summaries
+  # ... rest of config stays the same
+```
+
+### User Isolation
+
+- Each user's health check runs independently
+- If one user's check fails, others continue normally
+- Each user receives error notifications only to their own chat
+- Fresh LLM conversation for each user (no shared state)
+
+### Backward Compatibility
+
+**Existing single-user configs still work!** The system automatically detects legacy configurations and migrates them to a single default user. You'll see a warning in the logs:
+
+```
+WARNING: Detected legacy single-user configuration. Automatically migrating...
+```
+
+To migrate manually and add more users:
+
+```bash
+python scripts/migrate_config.py config.yaml
+# Edit config.yaml to add more users
+```
 
 ## Usage
 
@@ -370,14 +481,17 @@ journalctl -u health-assistant -f
 
 ```
 HealthAssistant/
-├── config.yaml.example          # Example configuration
+├── config.yaml.example          # Example configuration (single-user)
+├── config.yaml.example.multi    # Example configuration (multi-user)
 ├── config.yaml                  # Your configuration (gitignored)
 ├── requirements.txt             # Python dependencies
 ├── README.md                    # This file
+├── scripts/
+│   └── migrate_config.py        # Migration helper for multi-user config
 ├── src/
 │   ├── __init__.py
 │   ├── main.py                  # Main application
-│   ├── config.py                # Configuration loader
+│   ├── config.py                # Configuration loader (multi-user support)
 │   ├── fetchers/
 │   │   ├── __init__.py
 │   │   ├── base.py              # Abstract base class
