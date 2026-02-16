@@ -18,7 +18,10 @@ azure:
 
 # Telegram Configuration
 # Create bot via @BotFather to get bot_token
-# Get your chat_id by messaging @userinfobot
+# Get your chat_id:
+#   1. Send a message to your bot
+#   2. Visit: https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getUpdates
+#   3. Look for "chat":{"id": YOUR_CHAT_ID} in the response
 telegram:
   bot_token: "YOUR_TELEGRAM_BOT_TOKEN"
   chat_id: "YOUR_TELEGRAM_CHAT_ID"

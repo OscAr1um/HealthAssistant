@@ -79,7 +79,8 @@ class AzureOpenAIAnalyzer(DataAnalyzer):
                             "comprehensive, actionable insights. Focus on trends, patterns, and "
                             "personalized recommendations. Be encouraging but honest about areas "
                             "that need improvement. Format your response in clear sections with "
-                            "markdown formatting."
+                            "HTML formatting for Telegram. Use <b>bold</b>, <i>italic</i>, "
+                            "<code>code</code>, and <pre>preformatted</pre> tags. Use proper line breaks."
                         ),
                     },
                     {"role": "user", "content": prompt},
@@ -136,15 +137,15 @@ class AzureOpenAIAnalyzer(DataAnalyzer):
 {hr_section}
 
 Please provide:
-1. **Overall Health Summary**: A brief overview of my day's health metrics
-2. **Sleep Analysis**: Detailed insights about sleep quality, duration, and recommendations
-3. **Activity Analysis**: Assessment of physical activity levels and suggestions
-4. **Recovery & Readiness**: Evaluation of recovery status and what it means for today
-5. **Heart Rate Insights**: Analysis of heart rate patterns and cardiovascular health indicators
-6. **Key Recommendations**: 3-5 actionable suggestions to improve my health based on today's data
-7. **Trends & Patterns**: Any notable patterns or areas of concern
+1. <b>Overall Health Summary</b>: A brief overview of my day's health metrics
+2. <b>Sleep Analysis</b>: Detailed insights about sleep quality, duration, and recommendations
+3. <b>Activity Analysis</b>: Assessment of physical activity levels and suggestions
+4. <b>Recovery & Readiness</b>: Evaluation of recovery status and what it means for today
+5. <b>Heart Rate Insights</b>: Analysis of heart rate patterns and cardiovascular health indicators
+6. <b>Key Recommendations</b>: 3-5 actionable suggestions to improve my health based on today's data
+7. <b>Trends & Patterns</b>: Any notable patterns or areas of concern
 
-Format the response in clear markdown sections. Be specific, encouraging, and actionable."""
+Format the response in HTML for Telegram. Use <b>bold</b> for headers and emphasis, bullet points with proper line breaks, and clear sections. Be specific, encouraging, and actionable."""
 
         return prompt
 

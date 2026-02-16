@@ -142,7 +142,7 @@ class HealthAssistant:
             self.logger.info("Step 3/3: Sending summary via Telegram...")
 
             # Add header with date
-            message = f"🏥 **Daily Health Summary**\n📅 {target_date.strftime('%A, %B %d, %Y')}\n\n{analysis}"
+            message = f"🏥 <b>Daily Health Summary</b>\n📅 {target_date.strftime('%A, %B %d, %Y')}\n\n{analysis}"
 
             success = self.notifier.send(message)
 
@@ -166,7 +166,7 @@ class HealthAssistant:
             # Try to send error notification
             try:
                 error_message = (
-                    f"⚠️ **Health Assistant Error**\n\n"
+                    f"⚠️ <b>Health Assistant Error</b>\n\n"
                     f"Failed to generate daily health summary.\n\n"
                     f"Error: {str(e)}\n\n"
                     f"Please check the logs for details."

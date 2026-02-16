@@ -46,7 +46,7 @@ class TelegramNotifier(Notifier):
         Send a message via Telegram.
 
         Args:
-            message: Message text to send (supports Markdown formatting)
+            message: Message text to send (supports HTML formatting)
 
         Returns:
             True if message was sent successfully, False otherwise
@@ -93,11 +93,11 @@ class TelegramNotifier(Notifier):
         """
         for attempt in range(self.max_retries):
             try:
-                # Try with Markdown parsing first
+                # Try with HTML parsing (more reliable than Markdown for LLM output)
                 self.bot.send_message(
                     chat_id=self.chat_id,
                     text=message,
-                    parse_mode=ParseMode.MARKDOWN,
+                    parse_mode=ParseMode.HTML,
                 )
                 return True
 
