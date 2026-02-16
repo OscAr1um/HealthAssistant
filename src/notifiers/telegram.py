@@ -1,5 +1,6 @@
 """Telegram bot notifier."""
 
+import asyncio
 import time
 from typing import List
 
@@ -94,10 +95,12 @@ class TelegramNotifier(Notifier):
         for attempt in range(self.max_retries):
             try:
                 # Try with HTML parsing (more reliable than Markdown for LLM output)
-                self.bot.send_message(
-                    chat_id=self.chat_id,
-                    text=message,
-                    parse_mode=ParseMode.HTML,
+                asyncio.run(
+                    self.bot.send_message(
+                        chat_id=self.chat_id,
+                        text=message,
+                        parse_mode=ParseMode.HTML,
+                    )
                 )
                 return True
 
@@ -106,9 +109,11 @@ class TelegramNotifier(Notifier):
                 if "can't parse" in str(e).lower():
                     self.logger.warning("Markdown parsing failed, sending as plain text")
                     try:
-                        self.bot.send_message(
-                            chat_id=self.chat_id,
-                            text=message,
+                        asyncio.run(
+                            self.bot.send_message(
+                                chat_id=self.chat_id,
+                                text=message,
+                            )
                         )
                         return True
                     except TelegramError as e2:
