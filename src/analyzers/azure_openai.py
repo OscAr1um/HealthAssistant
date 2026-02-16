@@ -80,7 +80,8 @@ class AzureOpenAIAnalyzer(DataAnalyzer):
                             "personalized recommendations. Be encouraging but honest about areas "
                             "that need improvement. Format your response in clear sections with "
                             "HTML formatting for Telegram. Use <b>bold</b>, <i>italic</i>, "
-                            "<code>code</code>, and <pre>preformatted</pre> tags. Use proper line breaks."
+                            "<code>code</code>, and <pre>preformatted</pre> tags. Use proper line breaks. "
+                            "IMPORTANT: Keep your response concise and within 1500 tokens."
                         ),
                     },
                     {"role": "user", "content": prompt},

@@ -151,7 +151,8 @@ Data Fetcher → Analyzer → Notifier
 
 ### Azure OpenAI Specifics
 
-- **System Prompt**: Instructs the model to format response in HTML for Telegram compatibility
+- **System Prompt**: Instructs the model to format response in HTML for Telegram compatibility and keep responses within 1500 tokens
+- **Token Limit**: Analysis summaries are constrained to 1500 tokens maximum (enforced via `max_tokens` parameter and explicit prompt instruction)
 - **Prompt Construction**: `_construct_prompt()` formats health data into structured sections with markdown
 - **HTML Cleanup**: Replaces `<br>` tags with newlines for Telegram
 - **Format Sections**: Helper methods (`_format_sleep_data()`, etc.) convert raw API data into readable prompts
