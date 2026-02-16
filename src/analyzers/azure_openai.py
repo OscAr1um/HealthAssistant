@@ -90,9 +90,20 @@ class AzureOpenAIAnalyzer(DataAnalyzer):
             )
 
             summary = response.choices[0].message.content
-            self.logger.info("Successfully generated health analysis")
 
-            return summary
+            # Debug logging
+            if not summary:
+                self.logger.warning("Azure OpenAI returned empty content!")
+                self.logger.debug(f"Response object: {response}")
+            else:
+                self.logger.info(f"Successfully generated health analysis ({len(summary)} characters)")
+
+            # Clean up HTML for Telegram compatibility
+            if summary:
+                # Replace <br> and <br/> tags with newlines for Telegram
+                summary = summary.replace("<br>", "\n").replace("<br/>", "\n").replace("<BR>", "\n")
+
+            return summary if summary else "No analysis generated."
 
         except Exception as e:
             self.logger.error(f"Failed to analyze health data: {e}")

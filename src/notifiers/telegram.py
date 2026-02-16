@@ -94,8 +94,18 @@ class TelegramNotifier(Notifier):
         """
         for attempt in range(self.max_retries):
             try:
+                # Get or create event loop
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_closed():
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+
                 # Try with HTML parsing (more reliable than Markdown for LLM output)
-                asyncio.run(
+                loop.run_until_complete(
                     self.bot.send_message(
                         chat_id=self.chat_id,
                         text=message,
@@ -105,11 +115,11 @@ class TelegramNotifier(Notifier):
                 return True
 
             except TelegramError as e:
-                # If Markdown parsing fails, try without formatting
+                # If HTML parsing fails, try without formatting
                 if "can't parse" in str(e).lower():
-                    self.logger.warning("Markdown parsing failed, sending as plain text")
+                    self.logger.warning("HTML parsing failed, sending as plain text")
                     try:
-                        asyncio.run(
+                        loop.run_until_complete(
                             self.bot.send_message(
                                 chat_id=self.chat_id,
                                 text=message,

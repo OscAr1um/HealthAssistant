@@ -133,10 +133,21 @@ class HealthAssistant:
             health_data = self.fetcher.fetch_daily_data(target_date)
             self.logger.info("✓ Health data fetched successfully")
 
+            # Debug: log what data was fetched
+            data_summary = {
+                "date": health_data.get("date"),
+                "has_sleep": bool(health_data.get("sleep")),
+                "has_activity": bool(health_data.get("activity")),
+                "has_readiness": bool(health_data.get("readiness")),
+                "has_heart_rate": bool(health_data.get("heart_rate")),
+            }
+            self.logger.debug(f"Fetched data summary: {data_summary}")
+
             # Step 2: Analyze data with Azure OpenAI
             self.logger.info("Step 2/3: Analyzing health data with Azure OpenAI...")
             analysis = self.analyzer.analyze(health_data)
             self.logger.info("✓ Analysis completed successfully")
+            self.logger.debug(f"Analysis length: {len(analysis) if analysis else 0} characters")
 
             # Step 3: Send via Telegram
             self.logger.info("Step 3/3: Sending summary via Telegram...")
