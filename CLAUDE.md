@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-Health Assistant is a modular daily health monitoring system that fetches data from Oura Ring, analyzes it with Azure OpenAI, and sends personalized health summaries via Telegram. The system uses APScheduler to run daily at a configured time.
+Health Assistant is a modular daily health monitoring system that fetches data from Oura Ring, analyzes it with Azure OpenAI, and sends personalized health summaries via Telegram. The system supports **multiple users** with a single deployment, where each user has their own Oura token and Telegram bot/chat. The system uses APScheduler to run daily at a configured time.
 
 ## Common Commands
 
@@ -27,9 +27,9 @@ python -m src.main --config /path/to/config.yaml
 # Install dependencies
 pip install -r requirements.txt
 
-# Create configuration file
-cp config.yaml.example config.yaml
-# Then edit config.yaml with your API credentials
+# Create configuration file (multi-user)
+cp config.yaml.example.multi config.yaml
+# Then edit config.yaml with your users' credentials
 ```
 
 ### Testing
@@ -38,11 +38,24 @@ Currently, there is no formal test suite. Tests directory exists but contains on
 
 ## Architecture
 
-The codebase follows a **modular pipeline architecture** with three main stages:
+The codebase follows a **modular pipeline architecture** with multi-user support:
 
 ```
-Data Fetcher → Analyzer → Notifier
+HealthAssistant
+├── Shared: AzureOpenAIAnalyzer (stateless, used by all users)
+└── Per-User: UserHealthPipeline[]
+    ├── OuraFetcher (user's token)
+    ├── TelegramNotifier (user's bot/chat)
+    └── Runs independently with error isolation
 ```
+
+### Multi-User Design
+
+- **UserHealthPipeline**: Encapsulates each user's complete health monitoring flow
+- **Shared Azure Analyzer**: All users share a single AzureOpenAIAnalyzer instance (cost-effective, stateless)
+- **Per-User Components**: Each user gets their own OuraFetcher and TelegramNotifier instances
+- **Error Isolation**: One user's failure doesn't affect others
+- **Fresh Conversations**: Each user gets a new LLM conversation (no shared state)
 
 ### Core Components
 
@@ -68,19 +81,28 @@ Data Fetcher → Analyzer → Notifier
 
 ### Data Flow
 
-1. `main.py` → `HealthAssistant` class initializes all components from `config.yaml`
-2. Scheduler triggers `daily_health_check()` at configured time
-3. `OuraFetcher.fetch_daily_data()` fetches yesterday's data (Oura data is finalized the next day)
-4. `AzureOpenAIAnalyzer.analyze()` sends structured prompt with health data to Azure OpenAI
-5. `TelegramNotifier.send()` delivers the analysis as HTML-formatted message
-6. Errors are logged and error notifications are sent via Telegram
+1. `main.py` → `HealthAssistant` class initializes components from `config.yaml`
+2. Shared `AzureOpenAIAnalyzer` initialized once for all users
+3. `UserHealthPipeline` created for each enabled user with their own fetcher/notifier
+4. Scheduler triggers `daily_health_check()` at configured time
+5. For each user:
+   - `OuraFetcher.fetch_daily_data()` fetches yesterday's data (Oura data is finalized the next day)
+   - `AzureOpenAIAnalyzer.analyze()` sends structured prompt with health data to Azure OpenAI
+   - `TelegramNotifier.send()` delivers the analysis as HTML-formatted message
+6. Errors are logged per-user and error notifications sent to each user's Telegram
 
 ### Configuration System
 
 - **Config Loading**: `Config` class (`src/config.py`) loads and validates `config.yaml`
-- **Validation**: Checks for required fields (oura.access_token, azure.endpoint, etc.) at startup
-- **Dot Notation**: Supports `config.get("azure.endpoint")` for nested access
-- **Properties**: Provides convenient property accessors (`.oura`, `.azure`, `.telegram`, etc.)
+- **Multi-User Support**: Configuration contains `users[]` array with per-user credentials
+- **UserConfig Class**: Encapsulates individual user settings (id, name, enabled, oura, telegram)
+- **Validation**: Checks for required fields, duplicate user IDs, and configuration structure
+- **Properties**:
+  - `config.users`: Returns all user configurations
+  - `config.enabled_users`: Returns only enabled users
+  - `config.get_user(user_id)`: Lookup specific user by ID
+  - `config.azure`: Shared Azure OpenAI configuration
+  - `config.scheduler`: Shared scheduler configuration
 
 ### Logging
 
@@ -167,11 +189,52 @@ Data Fetcher → Analyzer → Notifier
 
 ### Configuration Requirements
 
-All these fields are required in `config.yaml`:
-- `oura.access_token`
+Configuration follows multi-user format in `config.yaml`:
+
+**Shared Resources (used by all users):**
 - `azure.endpoint`, `azure.api_key`, `azure.deployment_name`
-- `telegram.bot_token`, `telegram.chat_id`
-- `scheduler.hour`, `scheduler.minute`
+- `scheduler.hour`, `scheduler.minute`, `scheduler.timezone`
+- `logging.level`, `logging.log_file`
+
+**Per-User Configuration (in `users[]` array):**
+- `id`: Unique user identifier
+- `name`: Display name (optional)
+- `enabled`: true/false (can disable without removing config)
+- `oura.access_token`: User's Oura Ring API token
+- `telegram.bot_token`: User's Telegram bot token
+- `telegram.chat_id`: User's Telegram chat ID
+
+**Example Structure:**
+```yaml
+azure:
+  endpoint: "https://..."
+  api_key: "..."
+  deployment_name: "gpt-4"
+
+scheduler:
+  hour: 12
+  minute: 0
+  timezone: "UTC"
+
+users:
+  - id: "user_alice"
+    name: "Alice"
+    enabled: true
+    oura:
+      access_token: "ALICE_TOKEN"
+    telegram:
+      bot_token: "ALICE_BOT"
+      chat_id: "ALICE_CHAT"
+
+  - id: "user_bob"
+    name: "Bob"
+    enabled: true
+    oura:
+      access_token: "BOB_TOKEN"
+    telegram:
+      bot_token: "BOB_BOT"
+      chat_id: "BOB_CHAT"
+```
 
 ## Deployment
 

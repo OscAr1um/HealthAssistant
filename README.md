@@ -154,14 +154,10 @@ Health Assistant supports monitoring multiple users. You can configure multiple 
 
 ### Setting Up Multiple Users
 
-1. **Create the multi-user config structure**:
+1. **Start with the multi-user example**:
 
 ```bash
-# Option 1: Start with multi-user example
 cp config.yaml.example.multi config.yaml
-
-# Option 2: Migrate existing single-user config
-python scripts/migrate_config.py config.yaml
 ```
 
 2. **Edit `config.yaml`** with your users' credentials:
@@ -226,21 +222,6 @@ To temporarily disable a user without removing their configuration:
 - If one user's check fails, others continue normally
 - Each user receives error notifications only to their own chat
 - Fresh LLM conversation for each user (no shared state)
-
-### Backward Compatibility
-
-**Existing single-user configs still work!** The system automatically detects legacy configurations and migrates them to a single default user. You'll see a warning in the logs:
-
-```
-WARNING: Detected legacy single-user configuration. Automatically migrating...
-```
-
-To migrate manually and add more users:
-
-```bash
-python scripts/migrate_config.py config.yaml
-# Edit config.yaml to add more users
-```
 
 ## Usage
 
@@ -486,8 +467,6 @@ HealthAssistant/
 ├── config.yaml                  # Your configuration (gitignored)
 ├── requirements.txt             # Python dependencies
 ├── README.md                    # This file
-├── scripts/
-│   └── migrate_config.py        # Migration helper for multi-user config
 ├── src/
 │   ├── __init__.py
 │   ├── main.py                  # Main application

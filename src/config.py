@@ -112,38 +112,8 @@ class Config:
         with open(config_path, "r", encoding="utf-8") as f:
             self._config: Dict[str, Any] = yaml.safe_load(f)
 
-        self._detect_and_migrate_legacy()
         self._validate()
         self._users = self._load_users()
-
-    def _detect_and_migrate_legacy(self) -> None:
-        """Detect and migrate legacy single-user config to multi-user format."""
-        # Check if this is a legacy config (has top-level oura/telegram but no users array)
-        if "oura" in self._config and "users" not in self._config:
-            logger.warning(
-                "Detected legacy single-user configuration. Automatically migrating to multi-user format..."
-            )
-
-            # Create a single user from legacy config
-            legacy_user = {
-                "id": "default_user",
-                "name": "Default User",
-                "oura": self._config.get("oura", {}),
-                "telegram": self._config.get("telegram", {}),
-                "enabled": True,
-            }
-
-            # Add users array
-            self._config["users"] = [legacy_user]
-
-            # Remove top-level oura/telegram (keep azure, scheduler, logging)
-            self._config.pop("oura", None)
-            self._config.pop("telegram", None)
-
-            logger.info(
-                "Legacy configuration migrated successfully. "
-                "Consider updating config.yaml to new format for multi-user support."
-            )
 
     def _validate(self) -> None:
         """Validate that all required configuration fields are present."""
@@ -220,33 +190,6 @@ class Config:
             if user.user_id == user_id:
                 return user
         return None
-
-    @property
-    def oura(self) -> Dict[str, Any]:
-        """
-        Get Oura Ring configuration (legacy compatibility).
-
-        Note: For multi-user support, use config.users instead.
-        This property is maintained for backward compatibility.
-        """
-        # Return first user's oura config if available (legacy compatibility)
-        if self._users:
-            return self._users[0].oura
-        return {}
-
-    @property
-    def telegram(self) -> Dict[str, Any]:
-        """
-        Get Telegram configuration (legacy compatibility).
-
-        Note: For multi-user support, use config.users instead.
-        This property is maintained for backward compatibility.
-        """
-        # Return first user's telegram config if available (legacy compatibility)
-        if self._users:
-            return self._users[0].telegram
-        return {}
-
 
     @property
     def azure(self) -> Dict[str, Any]:
