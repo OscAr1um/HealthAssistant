@@ -1,23 +1,134 @@
 """Main application entry point for Health Assistant."""
 
 import argparse
+import logging
 import signal
 import sys
 from datetime import date, timedelta
 from pathlib import Path
+from typing import Dict, Optional
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from .analyzers.azure_openai import AzureOpenAIAnalyzer
-from .config import Config
+from .config import Config, UserConfig
 from .fetchers.oura import OuraFetcher
 from .notifiers.telegram import TelegramNotifier
 from .utils.logger import setup_logger
 
 
+class UserHealthPipeline:
+    """Health monitoring pipeline for a single user."""
+
+    def __init__(
+        self,
+        user_config: UserConfig,
+        analyzer: AzureOpenAIAnalyzer,
+        logger: logging.Logger,
+    ):
+        """
+        Initialize user-specific health pipeline.
+
+        Args:
+            user_config: User-specific configuration
+            analyzer: Shared Azure OpenAI analyzer instance
+            logger: Logger instance
+        """
+        self.user_config = user_config
+        self.analyzer = analyzer
+        self.logger = logger
+
+        # Initialize user-specific components
+        self.fetcher = OuraFetcher(
+            access_token=user_config.oura["access_token"],
+            user_id=user_config.oura.get("user_id"),
+        )
+
+        self.notifier = TelegramNotifier(
+            bot_token=user_config.telegram["bot_token"],
+            chat_id=user_config.telegram["chat_id"],
+        )
+
+    def run_health_check(self, target_date: Optional[date] = None) -> None:
+        """
+        Run health check for this user.
+
+        Args:
+            target_date: Date to fetch data for (defaults to yesterday)
+        """
+        user_id = self.user_config.user_id
+        user_name = self.user_config.name
+
+        self.logger.info(f"[{user_id}] Starting health check for user: {user_name}")
+
+        try:
+            # Calculate target date if not provided
+            if target_date is None:
+                target_date = date.today() - timedelta(days=1)
+
+            self.logger.info(f"[{user_id}] Target date: {target_date}")
+
+            # Step 1: Fetch health data
+            self.logger.info(f"[{user_id}] Step 1/3: Fetching health data from Oura Ring...")
+            health_data = self.fetcher.fetch_daily_data(target_date)
+            self.logger.info(f"[{user_id}] ✓ Health data fetched successfully")
+
+            # Debug: log what data was fetched
+            data_summary = {
+                "date": health_data.get("date"),
+                "has_sleep": bool(health_data.get("sleep")),
+                "has_activity": bool(health_data.get("activity")),
+                "has_readiness": bool(health_data.get("readiness")),
+                "has_heart_rate": bool(health_data.get("heart_rate")),
+            }
+            self.logger.debug(f"[{user_id}] Fetched data summary: {data_summary}")
+
+            # Step 2: Analyze data with Azure OpenAI
+            self.logger.info(f"[{user_id}] Step 2/3: Analyzing health data with Azure OpenAI...")
+            analysis = self.analyzer.analyze(health_data)
+            self.logger.info(f"[{user_id}] ✓ Analysis completed successfully")
+            self.logger.debug(
+                f"[{user_id}] Analysis length: {len(analysis) if analysis else 0} characters"
+            )
+
+            # Step 3: Send via Telegram
+            self.logger.info(f"[{user_id}] Step 3/3: Sending summary via Telegram...")
+
+            # Add header with date
+            message = f"🏥 <b>Daily Health Summary</b>\n📅 {target_date.strftime('%A, %B %d, %Y')}\n\n{analysis}"
+
+            success = self.notifier.send(message)
+
+            if success:
+                self.logger.info(f"[{user_id}] ✓ Summary sent successfully via Telegram")
+                self.logger.info(f"[{user_id}] Health check completed successfully")
+            else:
+                self.logger.error(f"[{user_id}] ✗ Failed to send summary via Telegram")
+                self.logger.error(f"[{user_id}] Health check completed with errors")
+
+        except Exception as e:
+            self.logger.error(f"[{user_id}] Health check failed: {e}", exc_info=True)
+
+            # Try to send error notification
+            try:
+                error_message = (
+                    f"⚠️ <b>Health Assistant Error</b>\n\n"
+                    f"Failed to generate daily health summary for {user_name}.\n\n"
+                    f"Error: {str(e)}\n\n"
+                    f"Please check the logs for details."
+                )
+                self.notifier.send(error_message)
+            except Exception as notify_error:
+                self.logger.error(
+                    f"[{user_id}] Failed to send error notification: {notify_error}"
+                )
+            raise  # Re-raise for tracking in daily_health_check
+
+
+
 class HealthAssistant:
-    """Main application class for Health Assistant."""
+    """Main application class for Health Assistant with multi-user support."""
 
     def __init__(self, config_path: str | Path | None = None):
         """
@@ -38,33 +149,11 @@ class HealthAssistant:
         )
 
         self.logger.info("=" * 80)
-        self.logger.info("Health Assistant Starting")
+        self.logger.info("Health Assistant Starting (Multi-User Support)")
         self.logger.info("=" * 80)
 
-        # Initialize components
-        self._initialize_components()
-
-        # Setup scheduler
-        self.scheduler = BlockingScheduler()
-        self._setup_scheduler()
-
-        # Setup signal handlers for graceful shutdown
-        signal.signal(signal.SIGINT, self._signal_handler)
-        signal.signal(signal.SIGTERM, self._signal_handler)
-
-    def _initialize_components(self) -> None:
-        """Initialize fetcher, analyzer, and notifier components."""
-        self.logger.info("Initializing components...")
-
-        # Initialize Oura Ring fetcher
-        oura_config = self.config.oura
-        self.fetcher = OuraFetcher(
-            access_token=oura_config["access_token"],
-            user_id=oura_config.get("user_id"),
-        )
-        self.logger.info("✓ Oura Ring fetcher initialized")
-
-        # Initialize Azure OpenAI analyzer
+        # Initialize shared Azure OpenAI analyzer
+        self.logger.info("Initializing shared Azure OpenAI analyzer...")
         azure_config = self.config.azure
         self.analyzer = AzureOpenAIAnalyzer(
             endpoint=azure_config["endpoint"],
@@ -77,15 +166,53 @@ class HealthAssistant:
         )
         self.logger.info("✓ Azure OpenAI analyzer initialized")
 
-        # Initialize Telegram notifier
-        telegram_config = self.config.telegram
-        self.notifier = TelegramNotifier(
-            bot_token=telegram_config["bot_token"],
-            chat_id=telegram_config["chat_id"],
-        )
-        self.logger.info("✓ Telegram notifier initialized")
+        # Initialize user pipelines
+        self.user_pipelines: Dict[str, UserHealthPipeline] = {}
+        self._initialize_user_pipelines()
 
-        self.logger.info("All components initialized successfully")
+        # Setup scheduler
+        self.scheduler = BlockingScheduler()
+        self._setup_scheduler()
+
+        # Setup signal handlers for graceful shutdown
+        signal.signal(signal.SIGINT, self._signal_handler)
+        signal.signal(signal.SIGTERM, self._signal_handler)
+
+    def _initialize_user_pipelines(self) -> None:
+        """Initialize health pipelines for all enabled users."""
+        enabled_users = self.config.enabled_users
+
+        if not enabled_users:
+            self.logger.warning("No enabled users found in configuration")
+            return
+
+        self.logger.info(f"Initializing pipelines for {len(enabled_users)} enabled users...")
+
+        for user_config in enabled_users:
+            try:
+                pipeline = UserHealthPipeline(
+                    user_config=user_config,
+                    analyzer=self.analyzer,
+                    logger=self.logger,
+                )
+
+                self.user_pipelines[user_config.user_id] = pipeline
+                self.logger.info(
+                    f"✓ Initialized pipeline for user: {user_config.name} ({user_config.user_id})"
+                )
+
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to initialize pipeline for user {user_config.user_id}: {e}",
+                    exc_info=True,
+                )
+                # Continue with other users even if one fails
+
+        if not self.user_pipelines:
+            raise RuntimeError("Failed to initialize any user pipelines")
+
+        self.logger.info(f"Successfully initialized {len(self.user_pipelines)} user pipelines")
+
 
     def _setup_scheduler(self) -> None:
         """Setup APScheduler with configured time."""
@@ -106,85 +233,53 @@ class HealthAssistant:
             func=self.daily_health_check,
             trigger=trigger,
             id="daily_health_check",
-            name="Daily Health Check",
+            name="Daily Health Check (All Users)",
             replace_existing=True,
         )
 
         self.logger.info(
-            f"Scheduler configured: Daily execution at {hour:02d}:{minute:02d} {timezone}"
+            f"Scheduler configured: Daily execution at {hour:02d}:{minute:02d} {timezone} "
+            f"for {len(self.user_pipelines)} users"
         )
 
     def daily_health_check(self) -> None:
         """
-        Main function to fetch, analyze, and send daily health summary.
+        Main function to fetch, analyze, and send daily health summary for all users.
         This runs daily at the scheduled time.
         """
         self.logger.info("=" * 80)
-        self.logger.info("Starting daily health check")
+        self.logger.info("Starting daily health check for all users")
         self.logger.info("=" * 80)
 
-        try:
-            # Calculate target date (yesterday, as Oura data is finalized the next day)
-            target_date = date.today() - timedelta(days=1)
-            self.logger.info(f"Target date: {target_date}")
+        if not self.user_pipelines:
+            self.logger.error("No user pipelines available")
+            return
 
-            # Step 1: Fetch health data
-            self.logger.info("Step 1/3: Fetching health data from Oura Ring...")
-            health_data = self.fetcher.fetch_daily_data(target_date)
-            self.logger.info("✓ Health data fetched successfully")
+        # Track statistics
+        total_users = len(self.user_pipelines)
+        successful = 0
+        failed = 0
 
-            # Debug: log what data was fetched
-            data_summary = {
-                "date": health_data.get("date"),
-                "has_sleep": bool(health_data.get("sleep")),
-                "has_activity": bool(health_data.get("activity")),
-                "has_readiness": bool(health_data.get("readiness")),
-                "has_heart_rate": bool(health_data.get("heart_rate")),
-            }
-            self.logger.debug(f"Fetched data summary: {data_summary}")
-
-            # Step 2: Analyze data with Azure OpenAI
-            self.logger.info("Step 2/3: Analyzing health data with Azure OpenAI...")
-            analysis = self.analyzer.analyze(health_data)
-            self.logger.info("✓ Analysis completed successfully")
-            self.logger.debug(f"Analysis length: {len(analysis) if analysis else 0} characters")
-
-            # Step 3: Send via Telegram
-            self.logger.info("Step 3/3: Sending summary via Telegram...")
-
-            # Add header with date
-            message = f"🏥 <b>Daily Health Summary</b>\n📅 {target_date.strftime('%A, %B %d, %Y')}\n\n{analysis}"
-
-            success = self.notifier.send(message)
-
-            if success:
-                self.logger.info("✓ Summary sent successfully via Telegram")
-                self.logger.info("=" * 80)
-                self.logger.info("Daily health check completed successfully")
-                self.logger.info("=" * 80)
-            else:
-                self.logger.error("✗ Failed to send summary via Telegram")
-                self.logger.info("=" * 80)
-                self.logger.error("Daily health check completed with errors")
-                self.logger.info("=" * 80)
-
-        except Exception as e:
-            self.logger.error(f"Daily health check failed: {e}", exc_info=True)
-            self.logger.info("=" * 80)
-            self.logger.error("Daily health check failed")
-            self.logger.info("=" * 80)
-
-            # Try to send error notification
+        # Process each user independently
+        for user_id, pipeline in self.user_pipelines.items():
             try:
-                error_message = (
-                    f"⚠️ <b>Health Assistant Error</b>\n\n"
-                    f"Failed to generate daily health summary.\n\n"
-                    f"Error: {str(e)}\n\n"
-                    f"Please check the logs for details."
+                pipeline.run_health_check()
+                successful += 1
+            except Exception as e:
+                # This should rarely happen since UserHealthPipeline handles its own exceptions
+                self.logger.error(
+                    f"Unexpected error processing user {user_id}: {e}",
+                    exc_info=True,
                 )
-                self.notifier.send(error_message)
-            except Exception as notify_error:
-                self.logger.error(f"Failed to send error notification: {notify_error}")
+                failed += 1
+
+        # Log summary
+        self.logger.info("=" * 80)
+        self.logger.info(
+            f"Daily health check completed: {successful}/{total_users} successful, {failed} failed"
+        )
+        self.logger.info("=" * 80)
+
 
     def run_now(self) -> None:
         """Run health check immediately (for testing)."""

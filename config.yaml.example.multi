@@ -1,0 +1,105 @@
+# ============================================================================
+# Health Assistant - Multi-User Configuration Example
+# ============================================================================
+# This example shows how to configure Health Assistant for multiple users.
+# Each user has their own Oura Ring token and Telegram bot/chat.
+# All users share the same Azure OpenAI deployment and run on the same schedule.
+
+# Azure OpenAI Configuration (Shared by all users)
+# Get your endpoint and API key from Azure Portal
+azure:
+  endpoint: "https://YOUR_RESOURCE.openai.azure.com/"
+  api_key: "YOUR_AZURE_API_KEY"
+  api_version: "2024-02-01"
+  deployment_name: "gpt-4"  # Your deployment name in Azure
+  model: "gpt-4"
+  temperature: 0.7  # Controls randomness (0.0-1.0). Lower = more focused, higher = more creative
+  max_tokens: 1500  # Maximum tokens in response. Keeps health summaries concise (1500 tokens ≈ 1000-1200 words)
+
+# Scheduler Configuration (Shared by all users)
+# All users will receive their health summaries at the same time
+scheduler:
+  hour: 12
+  minute: 0
+  timezone: "UTC"  # Change to your local timezone (e.g., "America/New_York", "Europe/London", "Asia/Shanghai")
+
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  log_file: "health_assistant.log"
+
+# ============================================================================
+# Users Configuration
+# ============================================================================
+# Each user needs:
+# - Unique ID (used for logging and tracking)
+# - Name (optional, for display purposes)
+# - Oura Ring Personal Access Token (get from: https://cloud.ouraring.com/personal-access-tokens)
+# - Telegram Bot Token (create bot via @BotFather)
+# - Telegram Chat ID (send message to bot, then visit: https://api.telegram.org/bot<BOT_TOKEN>/getUpdates)
+
+users:
+  # User 1: Alice
+  - id: "user_alice"
+    name: "Alice"
+    enabled: true  # Set to false to temporarily disable without removing config
+
+    # Oura Ring Configuration for Alice
+    oura:
+      access_token: "ALICE_OURA_PERSONAL_ACCESS_TOKEN"
+      # Optional: user_id can be auto-fetched if not provided
+      # user_id: "ALICE_OURA_USER_ID"
+
+    # Telegram Configuration for Alice
+    telegram:
+      bot_token: "ALICE_TELEGRAM_BOT_TOKEN"
+      chat_id: "ALICE_TELEGRAM_CHAT_ID"
+
+  # User 2: Bob
+  - id: "user_bob"
+    name: "Bob"
+    enabled: true
+
+    # Oura Ring Configuration for Bob
+    oura:
+      access_token: "BOB_OURA_PERSONAL_ACCESS_TOKEN"
+
+    # Telegram Configuration for Bob
+    telegram:
+      bot_token: "BOB_TELEGRAM_BOT_TOKEN"
+      chat_id: "BOB_TELEGRAM_CHAT_ID"
+
+  # User 3: Charlie (Disabled)
+  - id: "user_charlie"
+    name: "Charlie"
+    enabled: false  # Charlie's health checks will be skipped
+
+    # Oura Ring Configuration for Charlie
+    oura:
+      access_token: "CHARLIE_OURA_PERSONAL_ACCESS_TOKEN"
+
+    # Telegram Configuration for Charlie
+    telegram:
+      bot_token: "CHARLIE_TELEGRAM_BOT_TOKEN"
+      chat_id: "CHARLIE_TELEGRAM_CHAT_ID"
+
+# ============================================================================
+# Notes:
+# ============================================================================
+# 1. Each user gets a fresh LLM conversation (no shared state between users)
+# 2. Each user can have their own Telegram bot or share bots (but different chat_ids)
+# 3. All users share the same Azure OpenAI deployment (cost-effective)
+# 4. All users run at the same scheduled time
+# 5. If one user's health check fails, others will still be processed
+# 6. Each user receives error notifications only to their own Telegram chat
+# 7. User IDs must be unique across the configuration
+# 8. Set enabled: false to temporarily disable a user without removing their config
+
+# ============================================================================
+# Adding a New User:
+# ============================================================================
+# 1. Add a new entry to the users array with a unique ID
+# 2. Fill in their Oura access token
+# 3. Fill in their Telegram bot token and chat ID
+# 4. Set enabled: true
+# 5. Restart the Health Assistant
